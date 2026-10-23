@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# generated outputs (figures/ IS tracked: the README embeds one)
+*_cedetect.csv
+flagged.csv
+
+# the raw synthetic grid is far too large to version (see README)
+synthetic_spectra*/
+*.tar.gz
