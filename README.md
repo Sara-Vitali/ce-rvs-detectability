@@ -179,6 +179,40 @@ and then point the lookup at the result:
 python3 ce_detectability.py --table my_table.csv.gz --star 4500 1.8 -0.2 0.4 --snr 50
 ```
 
+### Try it: example spectra
+
+Six synthetic spectra from the grid are included in `data/ex_synth_spectra/`, so
+the pipeline can be run end to end without downloading anything:
+
+```bash
+python3 compute_gradients.py data/ex_synth_spectra -o example_table.csv
+```
+
+```
+window    851.05-851.25 nm
+criteria  sigma < 0.1 dex  |  EW >= 3 sigma_W = 0.004769 nm   (at S/N = 50)
+6 spectra, 4 (Teff, logg, [Fe/H]) nodes
+  WARNING: 2 of 4 nodes have a single [Ce/Fe] value and yield no gradient -- they are skipped
+  NOTE: [Ce/Fe] steps present: [0.6]. ...
+wrote example_table.csv: 2 rows, detectable 1 (50.0%)
+```
+
+| Teff | log g | [Fe/H] | [Ce/Fe] | σ<sub>CRB</sub> | EW | crb_pass | ew_pass | detectable |
+|---|---|---|---|---|---|---|---|---|
+| 4500 | 1.0 | −0.2 | 0.5 | 0.032 | 0.00623 | True | True | **True** |
+| 5500 | 3.0 | −0.2 | 0.5 | 0.279 | 0.00015 | False | False | False |
+
+The contrast is the point: at the same metallicity and Ce abundance, the cool
+giant is comfortably detectable and the warm subgiant is not, by two orders of
+magnitude in equivalent width.
+
+Two caveats, which the script warns about. These six spectra sample four nodes,
+two of which have a single [Ce/Fe] value and so yield no gradient. The other two
+span [Ce/Fe] = 0.2 → 0.8, a **0.6 dex step** rather than the 0.1 dex of the full
+grid, so the derivative is coarser than the one behind the shipped table and the
+numbers above are a demonstration, not a reproduction of it. A production run
+wants a node sampled at the grid's own [Ce/Fe] spacing.
+
 ### Input format
 
 One spectrum per file, named so the parameters can be read back:

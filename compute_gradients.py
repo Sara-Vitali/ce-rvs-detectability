@@ -24,14 +24,19 @@ A directory of one-spectrum-per-file text files:
 
     synth_teff4500_logg1.0_feh-0.2_cefe0.4.txt
 
-        wave <TAB> flux          <- one header line
-        851.000 <TAB> 0.998732
-        851.001 <TAB> 0.998698
+        waveobs <TAB> flux <TAB> err      <- one header line
+        851.000 <TAB> 1e-10 <TAB> 0.0
+        851.001 <TAB> 0.951700 <TAB> 0.0
         ...
 
-i.e. a one-line header then two tab-separated columns, wavelength in nm and
-continuum-normalised flux, on a fixed wavelength step. The atmospheric parameters
-are read from the filename; for a different naming scheme, edit FNAME_RE below.
+i.e. a one-line header then tab-separated columns on a fixed wavelength step:
+wavelength in nm and continuum-normalised flux. Any further columns (such as an
+error column) are ignored. The atmospheric parameters are read from the filename;
+for a different naming scheme, edit FNAME_RE below.
+
+Each (Teff, logg, [Fe/H]) node needs at least TWO [Ce/Fe] values, since the
+gradient is a finite difference between consecutive abundances. Nodes with only
+one are skipped with a warning.
 
 A FITS grid is also accepted: HDU0 a (npix, nspectra) flux image, HDU1
 [[lambda_0], [dlambda]] in nm, HDU2 a table with teff/logg/feh/cefe columns.
@@ -148,6 +153,19 @@ def compute(par, flux, wave, snr=ASSUMED_SNR, target_sigma=TARGET_SIGMA,
     same = par._node.values[1:] == par._node.values[:-1]
     lo = np.where(same)[0]
     hi = lo + 1
+
+    # a node needs at least two [Ce/Fe] values for a finite difference; say so
+    # loudly rather than dropping it silently
+    counts = par.groupby('_node').size()
+    lonely = int((counts < 2).sum())
+    if lonely:
+        print(f"  WARNING: {lonely} of {len(counts)} nodes have a single [Ce/Fe] "
+              f"value and yield no gradient -- they are skipped")
+    steps = np.unique(np.round(par.cefe.values[hi] - par.cefe.values[lo], 3))
+    if len(steps) > 1 or (len(steps) == 1 and steps[0] > 0.15):
+        print(f"  NOTE: [Ce/Fe] steps present: {[float(x) for x in steps]}. The Cramer-Rao bound "
+              f"assumes a locally linear response, so wide steps give a coarser "
+              f"derivative than the 0.1 dex of the published grid.")
 
     delta = par.cefe.values[hi] - par.cefe.values[lo]
     grad = (flux[hi] - flux[lo]) / delta[:, None]
