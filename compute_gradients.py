@@ -205,7 +205,7 @@ def main():
                    help=f'window end, nm (default {CE_WAVE_MAX})')
     g.add_argument('--n-edge', type=int, default=None,
                    help='pixels per side defining the local linear continuum '
-                        f'(default: {N_EDGE_FRAC:.1%} of the window, = 5 px at the '
+                        f'(default: {N_EDGE_FRAC:.1}%% of the window, = 5 px at the '
                         '0.001 nm sampling of the published grid)')
 
     c = ap.add_argument_group('detection criteria (defaults = paper values)')

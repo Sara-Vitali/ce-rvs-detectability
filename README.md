@@ -1,17 +1,11 @@
 # Ce detectability in *Gaia* RVS spectra
 
-Is the cerium abundance of a star actually measurable from its *Gaia* RVS
-spectrum?
-
-This repository answers that for any `(Teff, log g, [Fe/H], [Ce/Fe])` and
-signal-to-noise ratio, using the criterion of
-
 > Vitali et al., *Detectability limits of Ce abundances in Gaia RVS*
 
 The Ce II triplet near 851.1 nm is weak and unresolved at the RVS resolving
 power (R ≈ 11 500), so a reported [Ce/Fe] is not automatically a measurement.
 The tool tells you whether the feature carries usable information for a given
-star, and — importantly — reports the two ingredients of that judgement
+star, and, importantly, reports the two ingredients of that judgement
 separately.
 
 ![Ce detectability in the Kiel diagram](figures/fig2_detectability.png)
@@ -243,16 +237,6 @@ wrote example_table.csv: 5 rows, detectable 3 (60.0%)
 | 0.45 | 0.726 | 0.028 | 0.00583 | 0.00477 | True |
 | 0.55 | 0.848 | 0.024 | 0.00672 | 0.00477 | True |
 
-This is the whole criterion in five rows. The Ce sensitivity climbs steadily with
-abundance; the equivalent width crosses its 3σ threshold between [Ce/Fe] = 0.25
-and 0.35, and the verdict flips there. Note that the Cramér–Rao bound passes
-throughout — at this node it is the **Cayrel equivalent-width test that sets the
-boundary**, which is why the two flags are reported separately.
-
-These five rows reproduce the corresponding entries of
-`data/ce_detectability_table.csv.gz` to 6 × 10⁻⁶ in the gradient and exactly in
-`is_useful`, so the example also serves as a regression test of the pipeline
-against the published table.
 
 ### Input format
 

@@ -1,6 +1,0 @@
-name,teff,logg,feh,cefe,snr
-cool_giant,4000,1.0,0.0,0.5,50
-mild_giant,4500,1.8,-0.2,0.4,50
-metal_poor_giant,4200,1.5,-1.0,1.0,50
-solar_dwarf,5800,4.4,0.0,0.5,50
-high_snr_giant,4500,1.8,-0.2,0.4,200
