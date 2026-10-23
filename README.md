@@ -103,6 +103,44 @@ into the non-detections.
 Both limits scale as 1/SNR, so any S/N is obtained by rescaling the tabulated
 S/N = 50 reference.
 
+## Setting your own thresholds
+
+The table stores the **measured** quantities — the gradient (`grad_rss`), the
+equivalent width (`ew_ce`) — alongside the limits evaluated at the paper's
+settings. Because the limits only *rescale* when a threshold changes, you can
+apply your own criteria without touching the spectra:
+
+```bash
+python3 ce_detectability.py --star 4200 0.8 -0.2 0.4 --snr 50 --n-sigma 5
+#  CRB : sigma = 0.028 dex -> PASS (< 0.1 dex)
+#  EW  : 3.7 sigma         -> FAIL (>= 5 sigma)      <- was PASS at 3 sigma
+```
+
+| option | default | effect |
+|---|---|---|
+| `--snr` | 50 | both limits scale as 1/SNR |
+| `--target-sigma` | 0.1 dex | the CRB threshold — compared against `sigma_cefe` |
+| `--n-sigma` | 3 | detection significance — rescales `ew_limit` |
+| `--fwhm`, `--dx` | 0.0936, 0.03 nm | σ<sub>W</sub> ∝ √(FWHM·dx), so these rescale `ew_limit` too |
+
+Same from Python:
+
+```python
+ce = CeDetectability(target_sigma=0.2, n_sigma=5)
+```
+
+**What this cannot change.** Anything that alters the *measurement* rather than
+the threshold needs the spectra again, because it changes which pixels enter the
+sums:
+
+* the gradient window (`--wmin`, `--wmax`)
+* the local-continuum width (`--n-edge`)
+* the [Ce/Fe] step, which is set by the spacing of the grid itself
+
+For those, re-run `compute_gradients.py` on a grid of spectra and point
+`--table` at the result. That is the division of labour between the two scripts:
+thresholds here, measurements there.
+
 ## Output columns
 
 | column | meaning |

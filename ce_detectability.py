@@ -88,7 +88,18 @@ def _find_table(csv=None):
 class CeDetectability:
     """Nearest-node lookup of the Ce detectability criteria."""
 
-    def __init__(self, csv=None):
+    def __init__(self, csv=None, target_sigma=TARGET_SIGMA, n_sigma=N_SIGMA,
+                 fwhm=CE_FWHM_NM, dx=RVS_DX_NM):
+        # The thresholds are the user's to choose. The table stores the measured
+        # quantities (gradient, EW) plus the limits at the published settings;
+        # changing a threshold only rescales those limits, so no re-run of the
+        # spectra is needed. Changing the WINDOW or the continuum definition does
+        # need a re-run -- that is what compute_gradients.py is for.
+        self.target_sigma = target_sigma
+        self.n_sigma = n_sigma
+        # sigma_W scales as sqrt(FWHM*dx); the table was built at the defaults
+        self.ew_scale = ((n_sigma / N_SIGMA) *
+                         np.sqrt((fwhm * dx) / (CE_FWHM_NM * RVS_DX_NM)))
         self.csv = _find_table(csv)
         t = pd.read_csv(self.csv)
         self.table = t.rename(columns={'cefe_mid': 'cefe'}).reset_index(drop=True)
@@ -110,8 +121,8 @@ class CeDetectability:
 
         scale   = TABLE_SNR / snr               # both limits scale as 1/SNR
         sigma   = m.sigma_cefe.values * scale
-        ewlim   = m.ew_limit.values * scale
-        sigma_W = ewlim / N_SIGMA
+        ewlim   = m.ew_limit.values * scale * self.ew_scale
+        sigma_W = ewlim / self.n_sigma
 
         in_range = np.ones(len(q), bool)
         for k, (lo, hi) in self.ranges.items():
@@ -132,7 +143,7 @@ class CeDetectability:
             'ew_snr': m.ew_ce.values / sigma_W,
             'delta_cefe': m.delta_cefe.values,
         })
-        out['crb_pass'] = out.sigma_cefe < TARGET_SIGMA
+        out['crb_pass'] = out.sigma_cefe < self.target_sigma
         out['ew_pass'] = out.ew_ce >= out.ew_limit
         out['detectable'] = out.crb_pass & out.ew_pass
         return out
@@ -147,12 +158,24 @@ def main():
     ap.add_argument('--output', help='where to write the flagged catalogue')
     ap.add_argument('--snr', type=float, default=TABLE_SNR)
     ap.add_argument('--table', help='path to the detectability table')
+
+    # the thresholds are choices; the defaults are the paper's
+    t = ap.add_argument_group('thresholds (defaults = paper values)')
+    t.add_argument('--target-sigma', type=float, default=TARGET_SIGMA,
+                   help=f'CRB precision threshold, dex (default {TARGET_SIGMA})')
+    t.add_argument('--n-sigma', type=float, default=N_SIGMA,
+                   help=f'EW detection significance (default {N_SIGMA})')
+    t.add_argument('--fwhm', type=float, default=CE_FWHM_NM,
+                   help=f'line FWHM, nm (default {CE_FWHM_NM})')
+    t.add_argument('--dx', type=float, default=RVS_DX_NM,
+                   help=f'instrument pixel, nm (default {RVS_DX_NM})')
     args = ap.parse_args()
 
     if not (args.star or args.input):
         ap.error('give either --star or --input')
 
-    ce = CeDetectability(csv=args.table)
+    ce = CeDetectability(csv=args.table, target_sigma=args.target_sigma,
+                         n_sigma=args.n_sigma, fwhm=args.fwhm, dx=args.dx)
     print(f"table: {ce.csv}")
     print(f"grid : {len(ce.table)} entries, "
           f"{ce.table.groupby(['teff','logg','feh']).ngroups} (Teff, logg, [Fe/H]) nodes")
@@ -167,9 +190,9 @@ def main():
               f"{'' if r.in_grid_range else ', OUTSIDE grid range'})")
         print(f"            [alpha/Fe] = {r.alpha_assumed:+.1f} (MARCS standard, fixed by the grid)")
         print(f"CRB       : sigma = {r.sigma_cefe:.3f} dex  -> "
-              f"{'PASS' if r.crb_pass else 'FAIL'} (< {TARGET_SIGMA} dex)")
+              f"{'PASS' if r.crb_pass else 'FAIL'} (< {args.target_sigma} dex)")
         print(f"EW        : {r.ew_snr:.1f} sigma            -> "
-              f"{'PASS' if r.ew_pass else 'FAIL'} (>= {N_SIGMA} sigma)")
+              f"{'PASS' if r.ew_pass else 'FAIL'} (>= {args.n_sigma:g} sigma)")
         print(f"==> {'DETECTABLE' if r.detectable else 'NOT detectable'}")
 
     if args.input:
