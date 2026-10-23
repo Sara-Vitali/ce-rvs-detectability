@@ -154,7 +154,7 @@ tabulated [Ce/Fe] are **midpoints** (±0.05, ±0.15, …). A request for
 the midpoint actually used. In 16 of the 1 527 482 entries a synthesis is
 missing, so the difference spans 0.2 dex instead of 0.1 — see `delta_cefe`.
 
-## How the table was produced
+## How the table was produced — and how to run it on your own spectra
 
 `data/ce_detectability_table.csv.gz` is derived from a grid of **1 588 582
 synthetic spectra** computed with Turbospectrum (Alvarez & Plez 1998; Plez 2012),
@@ -164,21 +164,69 @@ solar scale of Grevesse et al. (2007), convolved to R = 11 500 and sampled at
 0.001 nm. Microturbulence was 1 km/s for dwarfs and 2 km/s for giants; no
 rotation or macroturbulence. Full details in Appendix A of the paper.
 
-That grid is ~37 GB and is not distributed here. The two scripts that produced
-the table from it are included, so the method is reproducible and auditable:
+That grid is ~37 GB and is not distributed here — but `compute_gradients.py`,
+the script that turned it into the shipped table, is. **It runs directly on a
+directory of synthetic spectra**, so if you have computed your own grid you can
+produce a detectability table for it:
 
 ```bash
-# 1. reduce the raw spectra to the Ce window (37 GB -> ~1.3 GB)
-python3 condense_grid.py /path/to/synthetic_spectra -o ce_grid_window.fits
-
-# 2. compute gradients, CRB and EW -> the shipped table
-python3 compute_gradients.py ce_grid_window.fits -o ce_detectability_table.csv
+python3 compute_gradients.py /path/to/your_spectra -o my_table.csv.gz
 ```
 
-`compute_gradients.py` also accepts the raw `synth_*.txt` directory directly.
-`condense_grid.py --sample-nodes N` extracts a small example grid, keeping whole
-(Teff, log g, [Fe/H]) nodes so every retained node keeps its full [Ce/Fe]
-sequence and the gradient stays defined.
+and then point the lookup at the result:
+
+```bash
+python3 ce_detectability.py --table my_table.csv.gz --star 4500 1.8 -0.2 0.4 --snr 50
+```
+
+### Input format
+
+One spectrum per file, named so the parameters can be read back:
+
+```
+synth_teff4500_logg1.0_feh-0.2_cefe0.4.txt
+
+    wave      flux            <- one header line
+    851.000   0.998732
+    851.001   0.998698
+    ...
+```
+
+A one-line header, then two tab-separated columns: wavelength in nm and
+continuum-normalised flux, on a fixed wavelength step. For a different naming
+convention, edit `FNAME_RE` at the top of the script. A FITS grid is also
+accepted (see the script's docstring).
+
+### Every choice is a command-line option
+
+The numbers behind the criterion are **choices, not constants** — the defaults
+reproduce the paper, and all of them can be changed:
+
+| option | default | what it controls |
+|---|---|---|
+| `--wmin`, `--wmax` | 851.05, 851.25 nm | the gradient window |
+| `--n-edge` | 5 px (2.5% of the window) | how much of the window defines the local linear continuum |
+| `--snr` | 50 | reference S/N; both limits scale as 1/SNR, so results rescale to any other |
+| `--target-sigma` | 0.1 dex | the CRB precision threshold — what "measurable" means |
+| `--fwhm` | 0.0936 nm | line FWHM, sets the Cayrel limit |
+| `--dx` | 0.03 nm | the **instrument** pixel, not the sampling of your spectra |
+| `--n-sigma` | 3 | EW detection significance — what "visible" means |
+
+So a stricter detection on a wider window, at higher S/N, is just:
+
+```bash
+python3 compute_gradients.py my_spectra -o strict.csv \
+    --wmin 851.00 --wmax 851.30 --snr 100 --target-sigma 0.05 --n-sigma 5
+```
+
+`python3 compute_gradients.py --help` lists them all with their defaults.
+
+Two things worth knowing if you change them. `--dx` is the pixel of the
+*instrument* you are simulating (0.03 nm for RVS), not the sampling of your
+synthetic spectra — the Cayrel limit is about the pixels the detection would
+actually be made on. And the gradient step comes from your grid's own [Ce/Fe]
+spacing, not from an option: the script differences consecutive abundances at
+each node, so the spacing of your grid sets the resolution of the derivative.
 
 ## Figures
 

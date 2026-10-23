@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-Build the detectability table from synthetic spectra.
+Build a Ce detectability table from synthetic spectra.
 
-This is the step that produced data/ce_detectability_table.csv.gz. It is included
-so the method is reproducible and auditable; the full 1.6 M-spectrum grid is too
-large to distribute, so the shipped table is its output.
-
-Input, either:
-  * a directory of synth_teff*_logg*_feh*_cefe*.txt files (the raw grid), or
-  * a FITS file written by condense_grid.py (the grid reduced to the Ce window)
+This is the step that produced data/ce_detectability_table.csv.gz, and it is the
+script to run if you have your OWN grid of synthetic spectra: it recomputes the
+gradient, the Cramer-Rao bound and the Cayrel equivalent width from scratch, with
+every choice exposed on the command line.
 
 For each (Teff, logg, [Fe/H]) node it steps through [Ce/Fe] and computes, between
 consecutive abundances:
@@ -18,10 +15,36 @@ consecutive abundances:
     EW       = integral of the line against a local linear continuum
     sigma_W  = (1.5/SNR) * sqrt(FWHM * dx)                Cayrel (1988)
 
-and flags crb_pass (sigma < 0.1 dex), ew_pass (EW >= 3 sigma_W) and their AND.
+and flags crb_pass (sigma < target), ew_pass (EW >= n_sigma * sigma_W) and their
+AND.
 
-    python3 compute_gradients.py /path/to/synthetic_spectra2 -o table.csv
-    python3 compute_gradients.py ce_grid_example.fits -o example_table.csv
+Input
+-----
+A directory of one-spectrum-per-file text files:
+
+    synth_teff4500_logg1.0_feh-0.2_cefe0.4.txt
+
+        wave <TAB> flux          <- one header line
+        851.000 <TAB> 0.998732
+        851.001 <TAB> 0.998698
+        ...
+
+i.e. a one-line header then two tab-separated columns, wavelength in nm and
+continuum-normalised flux, on a fixed wavelength step. The atmospheric parameters
+are read from the filename; for a different naming scheme, edit FNAME_RE below.
+
+A FITS grid is also accepted: HDU0 a (npix, nspectra) flux image, HDU1
+[[lambda_0], [dlambda]] in nm, HDU2 a table with teff/logg/feh/cefe columns.
+
+Examples
+--------
+    # reproduce the shipped table
+    python3 compute_gradients.py /path/to/synthetic_spectra -o table.csv.gz
+
+    # your own grid, with your own choices
+    python3 compute_gradients.py my_spectra -o my_table.csv --wmin 851.00 --wmax 851.30 --snr 100 --target-sigma 0.2 --fwhm 0.10
+
+Run with --help to see every option and its default.
 """
 
 import os
@@ -65,7 +88,7 @@ def measure_ew(wave, flux, n_edge):
     return np.trapezoid(np.clip(1.0 - flux / cont, 0.0, None), wave, axis=-1)
 
 
-def load_from_fits(path):
+def load_from_fits(path, wmin=CE_WAVE_MIN, wmax=CE_WAVE_MAX):
     from astropy.io import fits
     with fits.open(path) as h:
         flux = np.array(h[0].data.T, float)
@@ -75,15 +98,17 @@ def load_from_fits(path):
                             'logg': np.round(t['logg'].astype(float), 2),
                             'feh':  np.round(t['feh'].astype(float), 2),
                             'cefe': np.round(t['cefe'].astype(float), 2)})
-    return par, flux, w0 + dw * np.arange(flux.shape[1])
+    wave = w0 + dw * np.arange(flux.shape[1])
+    m = (wave >= wmin) & (wave <= wmax)
+    return par, flux[:, m], wave[m]
 
 
-def load_from_txt(directory):
+def load_from_txt(directory, wmin=CE_WAVE_MIN, wmax=CE_WAVE_MAX):
     files = sorted(glob.glob(os.path.join(directory, 'synth_*.txt')))
     if not files:
         raise SystemExit(f"no synth_*.txt in {directory}")
-    lo = N_HEADER + max(int((CE_WAVE_MIN - WAVE0_SYNTH) / DX_SYNTH) - PAD, 0)
-    hi = N_HEADER + int((CE_WAVE_MAX - WAVE0_SYNTH) / DX_SYNTH) + PAD
+    lo = N_HEADER + max(int((wmin - WAVE0_SYNTH) / DX_SYNTH) - PAD, 0)
+    hi = N_HEADER + int((wmax - WAVE0_SYNTH) / DX_SYNTH) + PAD
 
     rows, spectra, wave = [], [], None
     for k, p in enumerate(files):
@@ -96,7 +121,7 @@ def load_from_txt(directory):
             arr = np.array([ln.split('\t')[:2] for ln in chunk if ln.strip()], float)
         except ValueError:
             continue
-        msk = (arr[:, 0] >= CE_WAVE_MIN) & (arr[:, 0] <= CE_WAVE_MAX)
+        msk = (arr[:, 0] >= wmin) & (arr[:, 0] <= wmax)
         if wave is None:
             wave = arr[msk, 0]
         if msk.sum() != len(wave):
@@ -110,8 +135,9 @@ def load_from_txt(directory):
     return par, np.array(spectra), wave
 
 
-def compute(par, flux, wave):
-    n_edge = max(1, int(round(N_EDGE_FRAC * len(wave))))
+def compute(par, flux, wave, snr=ASSUMED_SNR, target_sigma=TARGET_SIGMA,
+            ew_limit=EW_LIMIT, n_edge=None):
+    n_edge = n_edge or max(1, int(round(N_EDGE_FRAC * len(wave))))
     print(f"window {wave[0]:.3f}-{wave[-1]:.3f} nm, {len(wave)} pixels, "
           f"n_edge={n_edge}")
 
@@ -127,7 +153,7 @@ def compute(par, flux, wave):
     grad = (flux[hi] - flux[lo]) / delta[:, None]
     grad_rss = np.sqrt(np.sum(grad ** 2, axis=1))
     with np.errstate(divide='ignore'):
-        sigma = 1.0 / (ASSUMED_SNR * grad_rss)
+        sigma = 1.0 / (snr * grad_rss)
     ew = measure_ew(wave, flux[hi], n_edge)
 
     out = pd.DataFrame({
@@ -137,28 +163,63 @@ def compute(par, flux, wave):
         'delta_cefe': np.round(delta, 3),
         'sigma_cefe': sigma, 'grad_rss': grad_rss,
         'max_gradient': np.max(np.abs(grad), axis=1),
-        'ew_ce': ew, 'ew_limit': EW_LIMIT,
+        'ew_ce': ew, 'ew_limit': ew_limit,
     })
-    out['crb_pass'] = out.sigma_cefe < TARGET_SIGMA
+    out['crb_pass'] = out.sigma_cefe < target_sigma
     out['ew_pass'] = out.ew_ce >= out.ew_limit
     out['is_useful'] = out.crb_pass & out.ew_pass
     return out
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('input', help='spectra directory, or a condense_grid.py FITS')
-    ap.add_argument('-o', '--output', default='ce_detectability_table.csv')
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('input', help='directory of synth_*.txt spectra, or a FITS grid')
+    ap.add_argument('-o', '--output', default='ce_detectability_table.csv',
+                    help='output table; a .gz suffix gzips it')
+
+    # Every number below is a CHOICE, not a constant of nature. The defaults are
+    # the values used in the paper; change them freely for your own grid.
+    g = ap.add_argument_group('gradient window (defaults = paper values)')
+    g.add_argument('--wmin', type=float, default=CE_WAVE_MIN,
+                   help=f'window start, nm (default {CE_WAVE_MIN})')
+    g.add_argument('--wmax', type=float, default=CE_WAVE_MAX,
+                   help=f'window end, nm (default {CE_WAVE_MAX})')
+    g.add_argument('--n-edge', type=int, default=None,
+                   help='pixels per side defining the local linear continuum '
+                        f'(default: {N_EDGE_FRAC:.1%} of the window, = 5 px at the '
+                        '0.001 nm sampling of the published grid)')
+
+    c = ap.add_argument_group('detection criteria (defaults = paper values)')
+    c.add_argument('--snr', type=float, default=ASSUMED_SNR,
+                   help=f'reference S/N (default {ASSUMED_SNR}); both limits scale '
+                        'as 1/SNR, so the output rescales to any other S/N')
+    c.add_argument('--target-sigma', type=float, default=TARGET_SIGMA,
+                   help=f'CRB precision threshold, dex (default {TARGET_SIGMA})')
+    c.add_argument('--fwhm', type=float, default=CE_FWHM_NM,
+                   help=f'line FWHM, nm (default {CE_FWHM_NM:.4f})')
+    c.add_argument('--dx', type=float, default=RVS_DX_NM,
+                   help=f'pixel size for the Cayrel limit, nm (default {RVS_DX_NM}). '
+                        'This is the INSTRUMENT pixel, not the sampling of the '
+                        'synthetic spectra.')
+    c.add_argument('--n-sigma', type=float, default=N_SIGMA,
+                   help=f'EW detection significance (default {N_SIGMA})')
     args = ap.parse_args()
 
+    ew_limit = args.n_sigma * (1.5 / args.snr) * np.sqrt(args.fwhm * args.dx)
+    print(f"window    {args.wmin}-{args.wmax} nm")
+    print(f"criteria  sigma < {args.target_sigma} dex  |  EW >= {args.n_sigma:g} sigma_W "
+          f"= {ew_limit:.6f} nm   (at S/N = {args.snr:g})")
+
     if os.path.isdir(args.input):
-        par, flux, wave = load_from_txt(args.input)
+        par, flux, wave = load_from_txt(args.input, args.wmin, args.wmax)
     else:
-        par, flux, wave = load_from_fits(args.input)
+        par, flux, wave = load_from_fits(args.input, args.wmin, args.wmax)
     print(f"{len(par)} spectra, "
           f"{par.groupby(['teff','logg','feh']).ngroups} (Teff, logg, [Fe/H]) nodes")
 
-    tab = compute(par, flux, wave)
+    tab = compute(par, flux, wave, snr=args.snr, target_sigma=args.target_sigma,
+                  ew_limit=ew_limit, n_edge=args.n_edge)
     comp = dict(compression='gzip') if args.output.endswith('.gz') else {}
     tab.to_csv(args.output, index=False, float_format='%.6g', **comp)
     print(f"wrote {args.output}: {len(tab)} rows, "
