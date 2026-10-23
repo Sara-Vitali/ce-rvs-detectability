@@ -10,3 +10,4 @@ flagged.csv
 # the raw synthetic grid is far too large to version (see README)
 synthetic_spectra*/
 *.tar.gz
+path/to/file.csv
