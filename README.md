@@ -2,7 +2,7 @@
 
 > Vitali et al., *Detectability limits of Ce abundances in Gaia RVS*
 
-The Ce II triplet near 851.1 nm is weak and unresolved at the RVS resolving
+The Ce II triplet near 851.1 nm is quite weak and unresolved at the RVS resolving
 power (R ≈ 11 500), so a reported [Ce/Fe] is not automatically a measurement.
 The tool tells you whether the feature carries usable information for a given
 star, and, importantly, reports the two ingredients of that judgement
@@ -43,16 +43,24 @@ Arguments to `--star` are in the order `Teff log g [Fe/H] [Ce/Fe]`.
 A catalogue — needs columns `teff, logg, feh, cefe`, optionally a per-star `snr`:
 
 ```bash
-python3 ce_detectability.py --input example_stars.csv --output flagged.csv --snr 50
+python3 ce_detectability.py --input data/ex_stars.csv --output flagged.csv --snr 50
 ```
 
-| name | snr | grid_distance | sigma_cefe | ew_snr | crb_pass | ew_pass | detectable |
-|---|---|---|---|---|---|---|---|
-| cool_giant | 50 | 0.50 | 0.022 | 4.96 | True | True | **True** |
-| mild_giant | 50 | 0.50 | 0.072 | 1.22 | True | False | False |
-| metal_poor_giant | 50 | 0.71 | 0.050 | 1.39 | True | False | False |
-| solar_dwarf | 50 | 0.50 | 1.107 | 0.01 | False | False | False |
-| high_snr_giant | 200 | 0.50 | 0.018 | 4.89 | True | True | **True** |
+| Teff | log g | [Fe/H] | [Ce/Fe] | grid_dist | sigma_cefe | ew_snr | crb_pass | ew_pass | detectable |
+|---|---|---|---|---|---|---|---|---|---|
+| 5600 | 0.6 | -0.2 | +0.25 | 0.00 | 0.073 | 0.48 | True | False | False |
+| 5975 | 4.4 | -1.0 | +1.95 | 0.00 | 0.260 | 0.09 | False | False | False |
+| 5375 | 0.6 | -1.6 | -0.05 | 0.00 | 1.851 | 0.00 | False | False | False |
+| 3950 | 0.0 | -1.8 | +0.75 | 0.00 | 0.057 | 1.15 | True | False | False |
+| 5625 | 2.6 | -0.8 | +1.45 | 0.00 | 0.084 | 0.56 | True | False | False |
+| 4075 | 4.4 | -0.9 | +1.55 | 0.00 | 0.153 | 0.26 | False | False | False |
+
+*(first 6 of 20 stars; 10 pass the CRB test, 1 the EW test, 1 both.)*
+
+Note how often `crb_pass` is True while `ew_pass` is False — half this sample
+carries enough Fisher information in principle, but only one star has a line
+that is individually visible. That gap is the reason the two flags are reported
+separately rather than merged.
 
 From Python:
 
