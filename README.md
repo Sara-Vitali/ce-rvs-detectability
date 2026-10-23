@@ -297,6 +297,29 @@ writes `figures/fig2_detectability.png` and `figures/figC1_detectability.png`,
 the detectability maps across the Kiel diagram for several metallicity and
 [Ce/Fe] bins, with contours at S/N = 25, 50 and 200.
 
+Its input is a **table**, not spectra — by default the shipped one, or any table
+produced by `compute_gradients.py`:
+
+```bash
+python3 plot_detectability.py --table my_table.csv --outdir my_figures
+```
+
+| option | default | |
+|---|---|---|
+| `--table` | the shipped table | which table to plot |
+| `--snr` | 50 25 200 | which S/N contours to draw |
+| `--outdir` | `figures` | where to write |
+| `--target-sigma` | 0.1 dex | CRB threshold |
+| `--n-sigma` | 3 | EW detection significance |
+
+The two threshold options mirror those of `ce_detectability.py`. **Pass the same
+values to both**, or the maps and the per-star answers will disagree.
+
+A map needs a grid: at least two distinct Teff and two distinct log g. A table
+built from a handful of spectra — `data/ex_synth_spectra/` is a single node —
+has nothing to map, and the script says so rather than failing obscurely. Use it
+with `compute_gradients.py` and `ce_detectability.py` instead.
+
 ## Caveats
 
 The boundary assumes a perfectly known continuum and exact atmospheric
