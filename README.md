@@ -13,7 +13,7 @@ separately.
 ## Install
 
 ```bash
-git clone https://github.com/<user>/ce-rvs-detectability.git
+git clone https://github.com/Sara-Vitali/ce-rvs-detectability.git
 cd ce-rvs-detectability
 pip install -r requirements.txt
 ```
@@ -88,7 +88,7 @@ sigma_CRB = 1 / (SNR * sqrt(sum_i g_i^2)),   g_i = df_i/d[Ce/Fe]
 sigma_W   = (1.5 / SNR) * sqrt(FWHM * dx),   FWHM = 0.0936 nm, dx = 0.03 nm
 ```
 
-σ<sub>CRB</sub> is the Cramér–Rao bound (Cramér 1945; Rao 1945), the best precision
+σ<sub>CRB</sub> is the Cramér–Rao bound (Cramér 1948; Rao 1945), the best precision
 any unbiased estimator could reach. σ<sub>W</sub> is the Cayrel (1988) equivalent-width
 uncertainty. The equivalent width is integrated against a local linear continuum
 taken from the edges of the 851.05–851.25 nm window, so a sloped pseudo-continuum
@@ -96,7 +96,7 @@ or a blended neighbour is not counted as Ce absorption.
 
 **Why the two flags are reported separately.** The Cramér–Rao bound sums signal
 in quadrature across pixels, so a line can be "statistically detectable" while
-its core sits well below the per-pixel noise — a regime highly sensitive to
+its core sits well below the per-pixel noise, a regime highly sensitive to
 continuum placement and blending. The Cayrel test is the reality check. Stars
 with `crb_pass=True, ew_pass=False` are exactly that marginal population
 (`mild_giant` above), and deserve separate treatment rather than being merged
